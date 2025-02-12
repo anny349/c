@@ -22,9 +22,10 @@ from .permissions import IsPostAuthor
 # ===========================
 
 # Ensure user exists before creating
-user, created = User.objects.get_or_create(username="new_user", defaults={"password": "secure_pass123"})
+user, created = User.objects.get_or_create(username="new_user")
 if created:
-    print("User created:", user.username)
+    user.set_password("secure_pass123")  # Correct way to set password
+    user.save()
 else:
     print("User already exists:", user.username)
 
