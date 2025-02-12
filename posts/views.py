@@ -12,7 +12,7 @@ from rest_framework import status, serializers
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
-from .models import User, Post, Comment
+from .models import Post, Comment
 from .serializers import UserSerializer, PostSerializer, CommentSerializer
 from .permissions import IsPostAuthor
 
@@ -22,10 +22,16 @@ from .permissions import IsPostAuthor
 # ===========================
 
 # Ensure user exists before creating
-user, created = User.objects.get_or_create(username="new_user")
+
+from django.contrib.auth.models import User
+
+username = "new_user"
+password = "secure_pass123"
+
+# Check if user already exists before creating
+user, created = User.objects.get_or_create(username="new_user", defaults={"password": "secure_pass123"})
 if created:
-    user.set_password("secure_pass123")  # Correct way to set password
-    user.save()
+    print("User created:", user.username)
 else:
     print("User already exists:", user.username)
 
@@ -40,10 +46,17 @@ else:
 admin_group, _ = Group.objects.get_or_create(name="Admin")
 
 # Fetch or create admin user
-admin_user, created = User.objects.get_or_create(username="admin_user")
+
+admin_user, created = User.objects.get_or_create(
+    username="admin_user",
+    defaults={"email": "admin@example.com"}
+)
+
 if created:
-    admin_user.set_password("adminpass")  # Hash the password properly
-    admin_user.save()  # Save the user with the hashed password
+    admin_user.set_password("yourpassword")
+    admin_user.save()
+
+
 
 # Assign the user to the Admin group
 admin_user.groups.add(admin_group)
@@ -198,5 +211,5 @@ class ProtectedView(APIView):
 # ===================
 
 # Create a test user with hashed password
-test_user = User.objects.create_user(username="new_user", password="secure_pass123")
-print(test_user.password)  # Outputs a hashed password
+# test_user = User.objects.create_user(username="new_user", password="secure_pass123")
+# print(test_user.password)  # Outputs a hashed password
