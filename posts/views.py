@@ -3,7 +3,6 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User, Group
-
 import json
 
 from rest_framework.views import APIView
@@ -21,45 +20,54 @@ from .permissions import IsPostAuthor
 # User Setup & Authentication
 # ===========================
 
-# Ensure user exists before creating
+class UserSetupView(APIView):
+    """Setup initial users and authentication"""
 
-from django.contrib.auth.models import User
+    def post(self, request):
+        # Extract username and password from request data
+        username = request.data.get("username", "new_user")
+        password = request.data.get("password", "secure_pass123")
 
-username = "new_user"
-password = "secure_pass123"
+        # Ensure user exists before creating
+        user, created = User.objects.get_or_create(username=username, defaults={"password": password})
+        if created:
+            user.set_password(password)  # Hash the password
+            user.save()
+            message = f"User created: {user.username}"
+        else:
+            message = f"User already exists: {user.username}"
 
-# Check if user already exists before creating
-user, created = User.objects.get_or_create(username="new_user", defaults={"password": "secure_pass123"})
-if created:
-    print("User created:", user.username)
-else:
-    print("User already exists:", user.username)
+        # Authenticate user
+        authenticated_user = authenticate(username=username, password=password)
+        if authenticated_user:
+            auth_message = "Authentication successful!"
+        else:
+            auth_message = "Invalid credentials. Ensure password is correct."
 
-# Authenticate user
-user = authenticate(username="new_user", password="secure_pass123")
-if user:
-    print("Authentication successful!")
-else:
-    print("Invalid credentials. Ensure password is correct.")
+        # Create Admin Group if it doesn’t exist
+        admin_group, _ = Group.objects.get_or_create(name="Admin")
 
-# Create Admin Group if it doesn’t exist
-admin_group, _ = Group.objects.get_or_create(name="Admin")
+        # Fetch or create admin user
+        admin_user, created = User.objects.get_or_create(
+            username="admin_user",
+            defaults={"email": "admin@example.com"}
+        )
 
-# Fetch or create admin user
+        if created:
+            admin_user.set_password("yourpassword")
+            admin_user.save()
 
-admin_user, created = User.objects.get_or_create(
-    username="admin_user",
-    defaults={"email": "admin@example.com"}
-)
+        # Assign the user to the Admin group
+        admin_user.groups.add(admin_group)
 
-if created:
-    admin_user.set_password("yourpassword")
-    admin_user.save()
-
-
-
-# Assign the user to the Admin group
-admin_user.groups.add(admin_group)
+        return Response(
+            {
+                "message": message,
+                "auth_message": auth_message,
+                "admin_message": f"Admin user {'created' if created else 'already exists'}",
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 # ===================
@@ -69,7 +77,7 @@ admin_user.groups.add(admin_group)
 def get_users(request):
     """Retrieve all users."""
     try:
-        users = list(User.objects.values('id', 'username', 'email', 'created_at'))
+        users = list(User.objects.values('id', 'username', 'email'))
         return JsonResponse(users, safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -87,63 +95,13 @@ def create_user(request):
             return JsonResponse({'error': str(e)}, status=400)
 
 
-def get_posts(request):
-    """Retrieve all posts."""
-    try:
-        posts = list(Post.objects.values('id', 'content', 'author', 'created_at'))
-        return JsonResponse(posts, safe=False)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-@csrf_exempt
-def create_post(request):
-    """Create a new post."""
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            author = User.objects.get(id=data['author'])
-            post = Post.objects.create(content=data['content'], author=author)
-            return JsonResponse({'id': post.id, 'message': 'Post created successfully'}, status=201)
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'Author not found'}, status=404)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
-
-
-def get_comments(request):
-    """Retrieve all comments."""
-    try:
-        comments = list(Comment.objects.values('id', 'text', 'author', 'post', 'created_at'))
-        return JsonResponse(comments, safe=False)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-@csrf_exempt
-def create_comment(request):
-    """Create a new comment."""
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            author = User.objects.get(id=data['author'])
-            post = Post.objects.get(id=data['post'])
-            comment = Comment.objects.create(text=data['text'], author=author, post=post)
-            return JsonResponse({'id': comment.id, 'message': 'Comment created successfully'}, status=201)
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'Author not found'}, status=404)
-        except Post.DoesNotExist:
-            return JsonResponse({'error': 'Post not found'}, status=404)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
-
-
 # ===================
 # Class-Based APIs
 # ===================
 
 class UserListCreate(APIView):
     """List all users or create a new user."""
+    
     def get(self, request):
         users = User.objects.all()
         serializer = UserSerializer(users, many=True)
@@ -159,6 +117,7 @@ class UserListCreate(APIView):
 
 class PostListCreate(APIView):
     """List all posts or create a new post."""
+    
     def get(self, request):
         posts = Post.objects.all()
         serializer = PostSerializer(posts, many=True)
@@ -174,6 +133,7 @@ class PostListCreate(APIView):
 
 class CommentListCreate(APIView):
     """List all comments or create a new comment."""
+    
     def get(self, request):
         comments = Comment.objects.all()
         serializer = CommentSerializer(comments, many=True)
@@ -204,12 +164,3 @@ class ProtectedView(APIView):
 
     def get(self, request):
         return Response({"message": "Authenticated!"})
-
-
-# ===================
-# Debugging
-# ===================
-
-# Create a test user with hashed password
-# test_user = User.objects.create_user(username="new_user", password="secure_pass123")
-# print(test_user.password)  # Outputs a hashed password
