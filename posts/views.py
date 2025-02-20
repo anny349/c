@@ -164,3 +164,38 @@ class ProtectedView(APIView):
 
     def get(self, request):
         return Response({"message": "Authenticated!"})
+
+
+
+# LOGGING
+
+from singletons.logger_singleton import LoggerSingleton
+
+
+logger = LoggerSingleton().get_logger()
+logger.info("API initialized successfully.")
+
+
+
+# FACTORY
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from factories.post_factory import PostFactory
+
+
+class CreatePostView(APIView):
+    def post(self, request):
+        data = request.data
+        try:
+            post = PostFactory.create_post(
+                post_type=data['post_type'],
+                title=data['title'],
+                content=data.get('content', ''),
+                metadata=data.get('metadata', {})
+            )
+            return Response({'message': 'Post created successfully!', 'post_id': post.id}, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
